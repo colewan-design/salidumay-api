@@ -113,22 +113,45 @@ class AnimeController extends Controller
 
                 foreach ($batch as $ep) {
                     $episodes[] = [
-                        'number'   => $ep['mal_id'],
-                        'title'    => $ep['title'] ?: "Episode {$ep['mal_id']}",
-                        'duration' => null,
+                        'number'    => $ep['mal_id'],
+                        'title'     => $ep['title'] ?: "Episode {$ep['mal_id']}",
+                        'duration'  => null,
                         'thumbnail' => null,
-                        'videoUrl' => null,
+                        'videoUrl'  => null,
                     ];
                 }
 
                 $hasNext = ($json['pagination']['has_next_page'] ?? false) && count($batch) > 0;
                 $page++;
 
-                // Jikan rate limit: 3 req/s — small delay between pages
                 if ($hasNext) {
-                    usleep(400000);
+                    usleep(400000); // Jikan rate limit
                 }
             } while ($hasNext);
+
+            // Fallback: Jikan has no episode data (movies, OVAs, specials).
+            // Generate a numbered list from the anime's total episode count.
+            if (empty($episodes)) {
+                $detail = $this->jikan("/anime/{$id}");
+                $total  = $detail['data']['episodes'] ?? 1;
+                $total  = is_numeric($total) ? (int) $total : 1;
+                $title  = $detail['data']['title'] ?? '';
+                $type   = strtolower($detail['data']['type'] ?? 'tv');
+
+                for ($n = 1; $n <= max(1, $total); $n++) {
+                    $label = match(true) {
+                        $total === 1 && in_array($type, ['movie', 'special', 'ova', 'ona']) => $title ?: 'Watch',
+                        default => "Episode {$n}",
+                    };
+                    $episodes[] = [
+                        'number'    => $n,
+                        'title'     => $label,
+                        'duration'  => null,
+                        'thumbnail' => null,
+                        'videoUrl'  => null,
+                    ];
+                }
+            }
 
             return ['data' => $episodes];
         });
