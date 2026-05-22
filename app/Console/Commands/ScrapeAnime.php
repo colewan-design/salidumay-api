@@ -9,80 +9,103 @@ use Illuminate\Support\Facades\Log;
 
 class ScrapeAnime extends Command
 {
-    protected $signature   = 'anime:scrape {--force : Re-scrape even recently scraped records}';
+    protected $signature = 'anime:scrape
+                            {--pages=4 : Number of pages to scrape from /top/anime (25 per page)}
+                            {--full    : Scrape all available pages (slow, use once for initial seed)}';
+
     protected $description = 'Scrape anime metadata from Jikan and store in the database';
 
-    private const JIKAN      = 'https://api.jikan.moe/v4';
-    private const DELAY_MS   = 500000; // 0.5s between requests — Jikan allows 3 req/s
-    private const PAGE_DELAY = 1200000; // 1.2s between paginated calls
+    private const JIKAN    = 'https://api.jikan.moe/v4';
+    private const DELAY_MS = 700000; // 0.7s between requests
 
     public function handle(): int
     {
         $this->info('Starting anime scrape…');
 
-        $this->scrapeHero();
-        $this->scrapeTopAiring();   // trending
-        $this->scrapeSeasonal();
-        $this->scrapeTop();
+        $this->scrapeFlags();   // hero, trending, seasonal, top flags
+        $this->scrapeFullList();
 
         $this->info('Done.');
         return 0;
     }
 
-    private function scrapeHero(): void
+    // ── Set special flags (hero, trending, seasonal, in_top) ─────────────────
+
+    private function scrapeFlags(): void
     {
-        $this->line('  → Hero (top airing #1)');
+        // Hero
+        $this->line('  → Hero');
         $json = $this->jikan('/top/anime', ['filter' => 'airing', 'limit' => 1]);
         if ($item = $json['data'][0] ?? null) {
             $this->upsert($item, ['in_hero' => true]);
-            // clear hero flag from any other row
-            Anime::where('in_hero', true)
-                ->where('mal_id', '!=', $item['mal_id'])
-                ->update(['in_hero' => false]);
+            Anime::where('in_hero', true)->where('mal_id', '!=', $item['mal_id'])->update(['in_hero' => false]);
         }
         usleep(self::DELAY_MS);
-    }
 
-    private function scrapeTopAiring(): void
-    {
-        $this->line('  → Trending (top airing, 12)');
+        // Trending (top airing 12)
+        $this->line('  → Trending');
         $json = $this->jikan('/top/anime', ['filter' => 'airing', 'limit' => 12]);
         $ids  = [];
         foreach ($json['data'] ?? [] as $item) {
             $this->upsert($item, ['in_trending' => true]);
             $ids[] = $item['mal_id'];
-            usleep(self::DELAY_MS / 4);
         }
         Anime::where('in_trending', true)->whereNotIn('mal_id', $ids)->update(['in_trending' => false]);
         usleep(self::DELAY_MS);
-    }
 
-    private function scrapeSeasonal(): void
-    {
-        $this->line('  → Seasonal (now, 16)');
-        $json = $this->jikan('/seasons/now', ['limit' => 16]);
+        // Seasonal
+        $this->line('  → Seasonal');
+        $json = $this->jikan('/seasons/now', ['limit' => 25]);
         $ids  = [];
         foreach ($json['data'] ?? [] as $item) {
             $this->upsert($item, ['in_seasonal' => true]);
             $ids[] = $item['mal_id'];
-            usleep(self::DELAY_MS / 4);
         }
         Anime::where('in_seasonal', true)->whereNotIn('mal_id', $ids)->update(['in_seasonal' => false]);
         usleep(self::DELAY_MS);
     }
 
-    private function scrapeTop(): void
+    // ── Paginate through /top/anime to build the full list ───────────────────
+
+    private function scrapeFullList(): void
     {
-        $this->line('  → Top anime (25)');
-        $json = $this->jikan('/top/anime', ['limit' => 25]);
-        $ids  = [];
-        foreach ($json['data'] ?? [] as $item) {
-            $this->upsert($item, ['in_top' => true]);
-            $ids[] = $item['mal_id'];
-            usleep(self::DELAY_MS / 4);
+        $maxPages = $this->option('full') ? 999 : (int) $this->option('pages');
+        $page     = 1;
+        $topIds   = [];
+
+        $this->line("  → Full list (up to {$maxPages} pages × 25)");
+
+        do {
+            $this->line("    page {$page}…");
+            $json  = $this->jikan('/top/anime', ['page' => $page, 'limit' => 25]);
+            $batch = $json['data'] ?? [];
+
+            if (empty($batch)) break;
+
+            foreach ($batch as $item) {
+                $inTop = $page === 1; // first page = top 25
+                $this->upsert($item, ['in_top' => $inTop]);
+                $topIds[] = $item['mal_id'];
+            }
+
+            $hasNext = $json['pagination']['has_next_page'] ?? false;
+            $page++;
+
+            usleep(self::DELAY_MS);
+        } while ($hasNext && $page <= $maxPages);
+
+        // Clear in_top flag for anything no longer in top 25
+        if (!empty($topIds)) {
+            Anime::where('in_top', true)
+                ->whereNotIn('mal_id', array_slice($topIds, 0, 25))
+                ->update(['in_top' => false]);
         }
-        Anime::where('in_top', true)->whereNotIn('mal_id', $ids)->update(['in_top' => false]);
+
+        $total = Anime::count();
+        $this->info("  ✓ {$total} anime total in database");
     }
+
+    // ── Upsert a single anime row ────────────────────────────────────────────
 
     private function upsert(array $item, array $extra = []): void
     {
@@ -117,8 +140,10 @@ class ScrapeAnime extends Command
             ], $extra)
         );
 
-        $this->line("    ✓ [{$malId}] " . ($item['title'] ?? '?'));
+        $this->line("      ✓ [{$malId}] " . ($item['title'] ?? '?'));
     }
+
+    // ── Jikan HTTP helper ────────────────────────────────────────────────────
 
     private function jikan(string $path, array $params = []): array
     {
