@@ -3,6 +3,8 @@
 use App\Http\Controllers\AnimeController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CommentController;
+use App\Http\Controllers\LibraryController;
+use App\Http\Controllers\HistoryController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('anime')->group(function () {
@@ -28,6 +30,18 @@ Route::get('comments/{animeId}', [CommentController::class, 'index']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('comments/{animeId}',          [CommentController::class, 'store']);
     Route::delete('comments/{animeId}/{comment}', [CommentController::class, 'destroy']);
+});
+
+// User library & history (auth required)
+Route::middleware('auth:sanctum')->prefix('user')->group(function () {
+    Route::get('library',              [LibraryController::class, 'index']);
+    Route::post('library',             [LibraryController::class, 'store']);
+    Route::delete('library/{animeId}', [LibraryController::class, 'destroy']);
+
+    Route::get('history',              [HistoryController::class, 'index']);
+    Route::post('history',             [HistoryController::class, 'store']);
+    Route::delete('history',           [HistoryController::class, 'clear']);
+    Route::delete('history/{animeId}', [HistoryController::class, 'destroy']);
 });
 
 // Auth routes
