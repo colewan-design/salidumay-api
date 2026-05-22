@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AnimeController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CommentController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('anime')->group(function () {
@@ -21,6 +22,13 @@ Route::prefix('anime')->group(function () {
     Route::get('{id}/streaming',      [AnimeController::class, 'streaming']);
     Route::get('{id}/related',        [AnimeController::class, 'related']);
 })->where(['id' => '[0-9]+']);
+
+// Comment routes (GET public, POST/DELETE requires auth)
+Route::get('comments/{animeId}', [CommentController::class, 'index']);
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('comments/{animeId}',          [CommentController::class, 'store']);
+    Route::delete('comments/{animeId}/{comment}', [CommentController::class, 'destroy']);
+});
 
 // Auth routes
 Route::prefix('auth')->group(function () {
