@@ -148,8 +148,9 @@ class ScrapeAnime extends Command
             ['mal_id' => $malId],
             array_merge([
                 'type'        => $item['type'] ?? 'TV',
-                'title'       => $item['title'] ?? '',
-                'subtitle'    => $item['title_japanese'] ?? $item['title_english'] ?? null,
+                'title'         => $item['title'] ?? '',
+                'subtitle'      => $item['title_japanese'] ?? null,
+                'english_title' => $item['title_english'] ?? null,
                 'image'       => $item['images']['jpg']['large_image_url']
                               ?? $item['images']['jpg']['image_url']
                               ?? null,

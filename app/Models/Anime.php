@@ -11,7 +11,7 @@ class Anime extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'mal_id', 'type', 'title', 'subtitle', 'image', 'genre', 'badge',
+        'mal_id', 'type', 'title', 'subtitle', 'english_title', 'image', 'genre', 'badge',
         'rating', 'episodes', 'status', 'year', 'studio', 'synopsis',
         'members', 'is_new', 'is_airing', 'trailer_url',
         'in_hero', 'in_trending', 'in_seasonal', 'in_top', 'in_movies', 'scraped_at',
@@ -32,9 +32,10 @@ class Anime extends Model
     public function toApiArray(): array
     {
         return [
-            'id'         => $this->mal_id,
-            'title'      => $this->title,
-            'subtitle'   => $this->subtitle,
+            'id'           => $this->mal_id,
+            'title'        => $this->title,
+            'subtitle'     => $this->subtitle,
+            'englishTitle' => $this->english_title,
             'image'      => $this->image,
             'genre'      => $this->genre,
             'badge'      => $this->badge,
