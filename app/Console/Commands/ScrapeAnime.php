@@ -23,6 +23,7 @@ class ScrapeAnime extends Command
         $this->info('Starting anime scrape…');
 
         $this->scrapeFlags();   // hero, trending, seasonal, top flags
+        $this->scrapeMovies();
         $this->scrapeFullList();
 
         $this->info('Done.');
@@ -63,6 +64,35 @@ class ScrapeAnime extends Command
         }
         Anime::where('in_seasonal', true)->whereNotIn('mal_id', $ids)->update(['in_seasonal' => false]);
         usleep(self::DELAY_MS);
+    }
+
+    // ── Scrape top movies ────────────────────────────────────────────────────
+
+    private function scrapeMovies(): void
+    {
+        $maxPages = $this->option('full') ? 20 : 2; // 2 pages = 50 movies on normal run
+        $page     = 1;
+        $ids      = [];
+
+        $this->line("  → Movies (top, {$maxPages} pages)");
+
+        do {
+            $json  = $this->jikan('/top/anime', ['type' => 'movie', 'page' => $page, 'limit' => 25]);
+            $batch = $json['data'] ?? [];
+
+            if (empty($batch)) break;
+
+            foreach ($batch as $item) {
+                $this->upsert($item, ['in_movies' => true, 'type' => 'Movie']);
+                $ids[] = $item['mal_id'];
+            }
+
+            $hasNext = $json['pagination']['has_next_page'] ?? false;
+            $page++;
+            usleep(self::DELAY_MS);
+        } while ($hasNext && $page <= $maxPages);
+
+        Anime::where('in_movies', true)->whereNotIn('mal_id', $ids)->update(['in_movies' => false]);
     }
 
     // ── Paginate through /top/anime to build the full list ───────────────────
@@ -117,6 +147,7 @@ class ScrapeAnime extends Command
         Anime::updateOrCreate(
             ['mal_id' => $malId],
             array_merge([
+                'type'        => $item['type'] ?? 'TV',
                 'title'       => $item['title'] ?? '',
                 'subtitle'    => $item['title_japanese'] ?? $item['title_english'] ?? null,
                 'image'       => $item['images']['jpg']['large_image_url']

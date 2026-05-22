@@ -11,10 +11,10 @@ class Anime extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'mal_id', 'title', 'subtitle', 'image', 'genre', 'badge',
+        'mal_id', 'type', 'title', 'subtitle', 'image', 'genre', 'badge',
         'rating', 'episodes', 'status', 'year', 'studio', 'synopsis',
         'members', 'is_new', 'is_airing', 'trailer_url',
-        'in_hero', 'in_trending', 'in_seasonal', 'in_top', 'scraped_at',
+        'in_hero', 'in_trending', 'in_seasonal', 'in_top', 'in_movies', 'scraped_at',
     ];
 
     protected $casts = [
