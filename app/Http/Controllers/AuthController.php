@@ -78,7 +78,7 @@ class AuthController extends Controller
         try {
             $googleUser = Socialite::driver('google')->stateless()->user();
         } catch (\Exception $e) {
-            return redirect(env('FRONTEND_URL') . '/login?error=google_auth_failed');
+            return redirect(config('app.frontend_url') . '/login?error=google_auth_failed');
         }
 
         $user = User::updateOrCreate(
@@ -99,7 +99,7 @@ class AuthController extends Controller
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return redirect(env('FRONTEND_URL') . '/auth/callback?token=' . $token);
+        return redirect(config('app.frontend_url') . '/auth/callback?token=' . $token);
     }
 
     private function formatUser(User $user): array
