@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AnimeController;
+use App\Http\Controllers\AuthController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('anime')->group(function () {
@@ -20,3 +21,16 @@ Route::prefix('anime')->group(function () {
     Route::get('{id}/streaming',      [AnimeController::class, 'streaming']);
     Route::get('{id}/related',        [AnimeController::class, 'related']);
 })->where(['id' => '[0-9]+']);
+
+// Auth routes
+Route::prefix('auth')->group(function () {
+    Route::post('register', [AuthController::class, 'register']);
+    Route::post('login',    [AuthController::class, 'login']);
+    Route::get('google',           [AuthController::class, 'googleRedirect']);
+    Route::get('google/callback',  [AuthController::class, 'googleCallback']);
+
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('logout', [AuthController::class, 'logout']);
+        Route::get('me',      [AuthController::class, 'me']);
+    });
+});
