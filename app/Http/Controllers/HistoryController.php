@@ -20,7 +20,7 @@ class HistoryController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'id'      => 'required|string',
+            'id'      => 'required',
             'title'   => 'required|string',
             'image'   => 'nullable|string',
             'genre'   => 'nullable|string',
@@ -28,7 +28,7 @@ class HistoryController extends Controller
         ]);
 
         $item = $request->user()->watchHistory()->updateOrCreate(
-            ['anime_id' => $request->id],
+            ['anime_id' => (string) $request->id],
             [
                 'title'      => $request->title,
                 'image'      => $request->image,
