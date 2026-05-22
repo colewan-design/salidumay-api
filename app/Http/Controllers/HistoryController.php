@@ -12,7 +12,15 @@ class HistoryController extends Controller
         $items = $request->user()
             ->watchHistory()
             ->orderByDesc('watched_at')
-            ->get();
+            ->get()
+            ->map(fn($item) => [
+                'id'        => $item->anime_id,
+                'title'     => $item->title,
+                'image'     => $item->image,
+                'genre'     => $item->genre,
+                'episode'   => $item->episode,
+                'watchedAt' => $item->watched_at,
+            ]);
 
         return response()->json(['data' => $items]);
     }

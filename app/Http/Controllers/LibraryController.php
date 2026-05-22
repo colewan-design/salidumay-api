@@ -12,7 +12,16 @@ class LibraryController extends Controller
         $items = $request->user()
             ->library()
             ->orderByDesc('created_at')
-            ->get();
+            ->get()
+            ->map(fn($item) => [
+                'id'       => $item->anime_id,
+                'title'    => $item->title,
+                'image'    => $item->image,
+                'genre'    => $item->genre,
+                'episodes' => $item->episodes,
+                'rating'   => $item->rating,
+                'addedAt'  => $item->created_at,
+            ]);
 
         return response()->json(['data' => $items]);
     }
