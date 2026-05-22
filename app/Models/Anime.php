@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Anime extends Model
 {
+    protected $table = 'anime';
     protected $primaryKey = 'mal_id';
     public $incrementing = false;
 
