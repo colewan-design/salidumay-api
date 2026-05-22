@@ -60,6 +60,48 @@ class AnimeController extends Controller
         return response()->json(['data' => $list]);
     }
 
+    public function rankings(Request $request): JsonResponse
+    {
+        $page    = max(1, (int) $request->query('page', 1));
+        $perPage = 25;
+
+        $query = Anime::orderByDesc('members');
+
+        $total = $query->count();
+        $items = $query->offset(($page - 1) * $perPage)->limit($perPage)->get()->map->toApiArray()->values();
+
+        return response()->json([
+            'data'       => $items,
+            'pagination' => [
+                'page'      => $page,
+                'per_page'  => $perPage,
+                'total'     => $total,
+                'has_next'  => ($page * $perPage) < $total,
+            ],
+        ]);
+    }
+
+    public function byGenre(Request $request, string $genre): JsonResponse
+    {
+        $page    = max(1, (int) $request->query('page', 1));
+        $perPage = 24;
+
+        $query = Anime::where('genre', $genre)->orderByDesc('members');
+
+        $total = $query->count();
+        $items = $query->offset(($page - 1) * $perPage)->limit($perPage)->get()->map->toApiArray()->values();
+
+        return response()->json([
+            'data'       => $items,
+            'pagination' => [
+                'page'      => $page,
+                'per_page'  => $perPage,
+                'total'     => $total,
+                'has_next'  => ($page * $perPage) < $total,
+            ],
+        ]);
+    }
+
     public function list(): JsonResponse
     {
         $list = Anime::orderByDesc('members')

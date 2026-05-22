@@ -10,6 +10,8 @@ Route::prefix('anime')->group(function () {
     Route::get('genres',      [AnimeController::class, 'genres']);
     Route::get('top',         [AnimeController::class, 'top']);
     Route::get('list',        [AnimeController::class, 'list']);
+    Route::get('rankings',    [AnimeController::class, 'rankings']);
+    Route::get('genre/{genre}', [AnimeController::class, 'byGenre']);
     Route::get('search',      [AnimeController::class, 'search']);
 
     Route::get('{id}',                [AnimeController::class, 'detail']);
