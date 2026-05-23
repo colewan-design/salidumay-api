@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Http;
 
 class FilmController extends Controller
 {
-    private const PER_PAGE   = 20;
+    private const PER_PAGE   = 24;
     private const CACHE_TTL  = 3600; // 1 hour
     private const TMDB_BASE  = 'https://api.themoviedb.org/3';
 
