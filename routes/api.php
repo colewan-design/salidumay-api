@@ -33,6 +33,7 @@ Route::prefix('films')->group(function () {
     Route::get('trending',          [FilmController::class, 'trending']);
     Route::get('top-rated',         [FilmController::class, 'topRated']);
     Route::get('now-playing',       [FilmController::class, 'nowPlaying']);
+    Route::get('upcoming',          [FilmController::class, 'upcoming']);
     Route::get('search',            [FilmController::class, 'search']);
     Route::get('genre/{genreId}',   [FilmController::class, 'byGenre']);
     Route::get('{id}',              [FilmController::class, 'show']);

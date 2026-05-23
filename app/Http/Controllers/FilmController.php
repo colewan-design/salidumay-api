@@ -96,6 +96,47 @@ class FilmController extends Controller
         );
     }
 
+    /**
+     * GET /api/films/upcoming?page=1
+     * Fetches directly from TMDB — no DB flag needed.
+     */
+    public function upcoming(Request $request): JsonResponse
+    {
+        $page = $request->integer('page', 1);
+        $key  = config('services.tmdb.key');
+
+        if (! $key) {
+            return response()->json(['message' => 'TMDB key not configured'], 500);
+        }
+
+        $data = Cache::remember("films:upcoming:{$page}", self::CACHE_TTL, function () use ($key, $page) {
+            $res = Http::timeout(10)->get(self::TMDB_BASE . '/movie/upcoming', [
+                'api_key' => $key,
+                'page'    => $page,
+            ]);
+
+            if (! $res->ok()) return null;
+
+            $json    = $res->json();
+            $results = array_map([$this, 'normalizeTmdb'], $json['results'] ?? []);
+
+            return [
+                'data'       => $results,
+                'pagination' => [
+                    'total_pages'  => $json['total_pages'] ?? 1,
+                    'current_page' => $json['page'] ?? $page,
+                    'has_next'     => $page < ($json['total_pages'] ?? 1),
+                ],
+            ];
+        });
+
+        if (! $data) {
+            return response()->json(['message' => 'Failed to fetch upcoming films'], 502);
+        }
+
+        return response()->json($data);
+    }
+
     // ── Genre filter ─────────────────────────────────────────────────────────
 
     /**
@@ -162,6 +203,38 @@ class FilmController extends Controller
     }
 
     // ── Private helper ───────────────────────────────────────────────────────
+
+    private function normalizeTmdb(array $m): array
+    {
+        $imgBase = 'https://image.tmdb.org/t/p';
+        $year    = isset($m['release_date']) && strlen($m['release_date']) >= 4
+            ? substr($m['release_date'], 0, 4) : null;
+
+        return [
+            'id'               => $m['id'],
+            'title'            => $m['title'] ?? $m['name'] ?? '',
+            'original_title'   => $m['original_title'] ?? null,
+            'overview'         => $m['overview'] ?? '',
+            'tagline'          => null,
+            'status'           => 'Upcoming',
+            'original_language'=> $m['original_language'] ?? null,
+            'adult'            => (bool) ($m['adult'] ?? false),
+            'image'            => $m['poster_path']   ? "{$imgBase}/w500{$m['poster_path']}"      : null,
+            'backdrop'         => $m['backdrop_path'] ? "{$imgBase}/original{$m['backdrop_path']}" : null,
+            'release_date'     => $m['release_date'] ?? null,
+            'year'             => $year,
+            'rating'           => round((float) ($m['vote_average'] ?? 0), 1),
+            'vote_count'       => $m['vote_count'] ?? 0,
+            'popularity'       => (float) ($m['popularity'] ?? 0),
+            'runtime'          => null,
+            'genres'           => array_map(fn($id) => ['id' => $id, 'name' => ''], $m['genre_ids'] ?? []),
+            'genre'            => '',
+            'genre_ids'        => $m['genre_ids'] ?? [],
+            'cast'             => [],
+            'director'         => null,
+            'trailer_key'      => null,
+        ];
+    }
 
     private function paginatedList($query, int $page, string $cacheKey): JsonResponse
     {
