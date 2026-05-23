@@ -41,4 +41,8 @@ return [
         'redirect'      => env('APP_URL') . '/api/auth/google/callback',
     ],
 
+    'tmdb' => [
+        'key' => env('TMDB_API_KEY'),
+    ],
+
 ];
