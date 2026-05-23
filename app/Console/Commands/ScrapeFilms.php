@@ -13,6 +13,7 @@ class ScrapeFilms extends Command
         {--pages=3      : Pages of popular / top-rated / now-playing to scrape (20 films per page)}
         {--detail       : Fetch full detail (cast, crew, trailer) for every film — slow but thorough}
         {--detail-only  : Skip list scraping; only backfill detail for films that have detail_fetched=false}
+        {--lists=       : Comma-separated list of categories to scrape: popular,top_rated,now_playing,trending}
         {--fresh        : Reset all category flags before scraping so stale entries are cleared}';
 
     protected $description = 'Scrape TMDB for films: popular, trending, top-rated, now-playing';
@@ -21,7 +22,7 @@ class ScrapeFilms extends Command
     private const TMDB_BASE    = 'https://api.themoviedb.org/3';
     private const REQUEST_GAP  = 260; // ms between requests — well within TMDB's 40 req/10 s limit
 
-    private string $apiKey;
+    private ?string $apiKey = null;
     private int    $upserted  = 0;
     private int    $detailed  = 0;
     private int    $errors    = 0;
@@ -53,10 +54,14 @@ class ScrapeFilms extends Command
         }
 
         if (! $detailOnly) {
-            $this->scrapeList('popular',     $pages,      'in_popular');
-            $this->scrapeList('trending',    1,           'in_trending', '/trending/movie/week');
-            $this->scrapeList('top_rated',   $pages,      'in_top_rated');
-            $this->scrapeList('now_playing', min($pages, 2), 'in_now_playing');
+            $only = $this->option('lists')
+                ? array_map('trim', explode(',', $this->option('lists')))
+                : ['popular', 'trending', 'top_rated', 'now_playing'];
+
+            if (in_array('popular',     $only)) $this->scrapeList('popular',     $pages,         'in_popular');
+            if (in_array('trending',    $only)) $this->scrapeList('trending',    1,              'in_trending', '/trending/movie/week');
+            if (in_array('top_rated',   $only)) $this->scrapeList('top_rated',   $pages,         'in_top_rated');
+            if (in_array('now_playing', $only)) $this->scrapeList('now_playing', min($pages, 2), 'in_now_playing');
         }
 
         if ($fetchDetail || $detailOnly) {
