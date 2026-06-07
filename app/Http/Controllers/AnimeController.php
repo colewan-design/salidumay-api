@@ -269,14 +269,16 @@ class AnimeController extends Controller
         return response()->json($data);
     }
 
-    public function seasons(int $id): JsonResponse
+    public function seasons(int $id, Request $request): JsonResponse
     {
-        $key  = "anime:seasons:{$id}";
+        $key = "anime:seasons:{$id}";
+        if ($request->boolean('refresh')) Cache::forget($key);
+
         $data = Cache::remember($key, 21600, function () use ($id) {
             $response = Http::timeout(15)->accept('application/json')
                 ->get("https://api.jikan.moe/v4/anime/{$id}/relations");
 
-            $seasonRelations = ['Sequel', 'Prequel', 'Alternative version'];
+            $seasonRelations = ['Sequel', 'Prequel', 'Alternative version', 'Parent story', 'Side story', 'Full story', 'Summary'];
             $entries = [];
 
             foreach ($response->json()['data'] ?? [] as $rel) {
