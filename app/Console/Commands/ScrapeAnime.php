@@ -142,35 +142,40 @@ class ScrapeAnime extends Command
         $malId = $item['mal_id'] ?? null;
         if (!$malId) return;
 
-        $status = $item['status'] ?? '';
+        $status       = $item['status'] ?? '';
+        $englishTitle = $item['title_english'] ?? null;
 
-        Anime::updateOrCreate(
-            ['mal_id' => $malId],
-            array_merge([
-                'type'        => $item['type'] ?? 'TV',
-                'title'         => $item['title'] ?? '',
-                'subtitle'      => $item['title_japanese'] ?? null,
-                'english_title' => $item['title_english'] ?? null,
-                'image'       => $item['images']['jpg']['large_image_url']
-                              ?? $item['images']['jpg']['image_url']
-                              ?? null,
-                'genre'       => $item['genres'][0]['name'] ?? $item['demographics'][0]['name'] ?? 'Anime',
-                'badge'       => $item['genres'][0]['name'] ?? 'Anime',
-                'rating'      => is_numeric($item['score'] ?? null) ? (float) $item['score'] : 0,
-                'episodes'    => $item['episodes'] ?? null,
-                'status'      => $status === 'Currently Airing' ? 'Airing' : 'Done',
-                'year'        => $item['year'] ?? $item['aired']['prop']['from']['year'] ?? null,
-                'studio'      => $item['studios'][0]['name'] ?? null,
-                'synopsis'    => $item['synopsis'] ?? null,
-                'members'     => $item['members'] ?? 0,
-                'is_new'      => $status === 'Currently Airing',
-                'is_airing'   => $status === 'Currently Airing',
-                'trailer_url' => isset($item['trailer']['embed_url'])
-                    ? str_replace('autoplay=1', 'autoplay=0', $item['trailer']['embed_url']) . '&enablejsapi=0'
-                    : null,
-                'scraped_at'  => now(),
-            ], $extra)
-        );
+        $fields = [
+            'type'        => $item['type'] ?? 'TV',
+            'title'       => $item['title'] ?? '',
+            'subtitle'    => $item['title_japanese'] ?? null,
+            'image'       => $item['images']['jpg']['large_image_url']
+                          ?? $item['images']['jpg']['image_url']
+                          ?? null,
+            'genre'       => $item['genres'][0]['name'] ?? $item['demographics'][0]['name'] ?? 'Anime',
+            'badge'       => $item['genres'][0]['name'] ?? 'Anime',
+            'rating'      => is_numeric($item['score'] ?? null) ? (float) $item['score'] : 0,
+            'episodes'    => $item['episodes'] ?? null,
+            'status'      => $status === 'Currently Airing' ? 'Airing' : 'Done',
+            'year'        => $item['year'] ?? $item['aired']['prop']['from']['year'] ?? null,
+            'studio'      => $item['studios'][0]['name'] ?? null,
+            'synopsis'    => $item['synopsis'] ?? null,
+            'members'     => $item['members'] ?? 0,
+            'is_new'      => $status === 'Currently Airing',
+            'is_airing'   => $status === 'Currently Airing',
+            'trailer_url' => isset($item['trailer']['embed_url'])
+                ? str_replace('autoplay=1', 'autoplay=0', $item['trailer']['embed_url']) . '&enablejsapi=0'
+                : null,
+            'scraped_at'  => now(),
+        ];
+
+        // Only overwrite english_title when Jikan provides one, so
+        // AniList-enriched fallbacks are not wiped on subsequent scrapes.
+        if ($englishTitle !== null) {
+            $fields['english_title'] = $englishTitle;
+        }
+
+        Anime::updateOrCreate(['mal_id' => $malId], array_merge($fields, $extra));
 
         $this->line("      ✓ [{$malId}] " . ($item['title'] ?? '?'));
     }
