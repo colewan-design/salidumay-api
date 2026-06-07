@@ -25,6 +25,7 @@ Route::prefix('anime')->group(function () {
     Route::get('{id}/episodes',       [AnimeController::class, 'episodes']);
     Route::get('{id}/streaming',      [AnimeController::class, 'streaming']);
     Route::get('{id}/related',        [AnimeController::class, 'related']);
+    Route::get('{id}/seasons',        [AnimeController::class, 'seasons']);
 })->where(['id' => '[0-9]+']);
 
 // TV Series (TMDB — all public)

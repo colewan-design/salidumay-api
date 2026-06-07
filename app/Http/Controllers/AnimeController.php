@@ -269,6 +269,33 @@ class AnimeController extends Controller
         return response()->json($data);
     }
 
+    public function seasons(int $id): JsonResponse
+    {
+        $key  = "anime:seasons:{$id}";
+        $data = Cache::remember($key, 21600, function () use ($id) {
+            $response = Http::timeout(15)->accept('application/json')
+                ->get("https://api.jikan.moe/v4/anime/{$id}/relations");
+
+            $seasonRelations = ['Sequel', 'Prequel', 'Alternative version'];
+            $seasons = [];
+
+            foreach ($response->json()['data'] ?? [] as $rel) {
+                if (!in_array($rel['relation'], $seasonRelations)) continue;
+                foreach ($rel['entry'] ?? [] as $entry) {
+                    if (($entry['type'] ?? '') !== 'anime') continue;
+                    $seasons[] = [
+                        'id'       => $entry['mal_id'],
+                        'title'    => $entry['name'],
+                        'relation' => $rel['relation'],
+                    ];
+                }
+            }
+
+            return ['data' => $seasons];
+        });
+        return response()->json($data);
+    }
+
     private function normalizeAnime(?array $item): ?array
     {
         if (!$item) return null;
