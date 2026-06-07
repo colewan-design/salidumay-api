@@ -4,6 +4,7 @@ use App\Http\Controllers\AnimeController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\FilmController;
+use App\Http\Controllers\TvSeriesController;
 use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\HistoryController;
 use Illuminate\Support\Facades\Route;
@@ -25,6 +26,18 @@ Route::prefix('anime')->group(function () {
     Route::get('{id}/streaming',      [AnimeController::class, 'streaming']);
     Route::get('{id}/related',        [AnimeController::class, 'related']);
 })->where(['id' => '[0-9]+']);
+
+// TV Series (TMDB — all public)
+Route::prefix('tv')->group(function () {
+    Route::get('genres',          [TvSeriesController::class, 'genres']);
+    Route::get('popular',         [TvSeriesController::class, 'popular']);
+    Route::get('trending',        [TvSeriesController::class, 'trending']);
+    Route::get('top-rated',       [TvSeriesController::class, 'topRated']);
+    Route::get('airing-today',    [TvSeriesController::class, 'airingToday']);
+    Route::get('search',          [TvSeriesController::class, 'search']);
+    Route::get('genre/{genreId}', [TvSeriesController::class, 'byGenre']);
+    Route::get('{id}',            [TvSeriesController::class, 'show']);
+})->where(['id' => '[0-9]+', 'genreId' => '[0-9]+']);
 
 // Films (TMDB — all public)
 Route::prefix('films')->group(function () {
