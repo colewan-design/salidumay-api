@@ -17,6 +17,7 @@ class ScrapeTvSeries extends Command
         {--detail-only     : Skip list scraping; only backfill detail for series without it}
         {--seasons         : Fetch seasons and episodes for every series that has detail}
         {--seasons-only    : Skip list and detail scraping; only fetch missing seasons/episodes}
+        {--limit=50        : Max number of series to process per seasons run (prevents memory kills)}
         {--lists=          : Comma-separated categories: popular,top_rated,airing_today,trending}
         {--fresh           : Reset all category flags before scraping}';
 
@@ -149,9 +150,11 @@ class ScrapeTvSeries extends Command
 
     private function scrapeSeasonPhase(): void
     {
+        $limit   = (int) $this->option('limit');
         $pending = TvSeries::where('detail_fetched', true)
             ->where('seasons_fetched', false)
             ->orderByDesc('popularity')
+            ->limit($limit > 0 ? $limit : PHP_INT_MAX)
             ->get();
 
         $total = $pending->count();

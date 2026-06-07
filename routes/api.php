@@ -72,6 +72,12 @@ Route::middleware('auth:sanctum')->prefix('user')->group(function () {
     Route::delete('history/{animeId}', [HistoryController::class, 'destroy']);
 });
 
+// Cron trigger (called by cron-job.org every minute)
+Route::get('cron/run', function () {
+    Illuminate\Support\Facades\Artisan::call('schedule:run');
+    return response()->json(['ok' => true]);
+})->middleware('throttle:1,1');
+
 // Auth routes
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
