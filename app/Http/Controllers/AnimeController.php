@@ -277,17 +277,35 @@ class AnimeController extends Controller
                 ->get("https://api.jikan.moe/v4/anime/{$id}/relations");
 
             $seasonRelations = ['Sequel', 'Prequel', 'Alternative version'];
-            $seasons = [];
+            $entries = [];
 
             foreach ($response->json()['data'] ?? [] as $rel) {
                 if (!in_array($rel['relation'], $seasonRelations)) continue;
                 foreach ($rel['entry'] ?? [] as $entry) {
                     if (($entry['type'] ?? '') !== 'anime') continue;
-                    $seasons[] = [
-                        'id'       => $entry['mal_id'],
-                        'title'    => $entry['name'],
-                        'relation' => $rel['relation'],
-                    ];
+                    $entries[] = ['mal_id' => $entry['mal_id'], 'name' => $entry['name'], 'relation' => $rel['relation']];
+                }
+            }
+
+            if (empty($entries)) return ['data' => []];
+
+            // Enrich from local DB first
+            $malIds  = array_column($entries, 'mal_id');
+            $dbAnime = Anime::whereIn('mal_id', $malIds)->get()->keyBy('mal_id');
+
+            $seasons = [];
+            foreach ($entries as $entry) {
+                $local = $dbAnime->get($entry['mal_id']);
+                if ($local) {
+                    $seasons[] = array_merge($local->toApiArray(), ['relation' => $entry['relation']]);
+                } else {
+                    // Fetch from Jikan for entries not in DB
+                    $res  = Http::timeout(15)->accept('application/json')
+                        ->get("https://api.jikan.moe/v4/anime/{$entry['mal_id']}");
+                    $item = $res->json()['data'] ?? null;
+                    $normalized = $item ? $this->normalizeAnime($item) : ['id' => $entry['mal_id'], 'title' => $entry['name']];
+                    $seasons[] = array_merge($normalized, ['relation' => $entry['relation']]);
+                    usleep(700000);
                 }
             }
 
