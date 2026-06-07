@@ -163,6 +163,9 @@ class AnimeController extends Controller
     {
         $anime = Anime::find($id);
         if ($anime) {
+            if (empty($anime->english_title)) {
+                $anime = $this->backfillEnglishTitle($anime, $id);
+            }
             return response()->json(['data' => $anime->toApiArray()]);
         }
 
@@ -177,24 +180,25 @@ class AnimeController extends Controller
             if ($item) {
                 $status = $item['status'] ?? '';
                 Anime::updateOrCreate(['mal_id' => $id], [
-                    'title'      => $item['title'] ?? '',
-                    'subtitle'   => $item['title_japanese'] ?? $item['title_english'] ?? null,
-                    'image'      => $item['images']['jpg']['large_image_url'] ?? $item['images']['jpg']['image_url'] ?? null,
-                    'genre'      => $item['genres'][0]['name'] ?? 'Anime',
-                    'badge'      => $item['genres'][0]['name'] ?? 'Anime',
-                    'rating'     => is_numeric($item['score'] ?? null) ? (float) $item['score'] : 0,
-                    'episodes'   => $item['episodes'] ?? null,
-                    'status'     => $status === 'Currently Airing' ? 'Airing' : 'Done',
-                    'year'       => $item['year'] ?? $item['aired']['prop']['from']['year'] ?? null,
-                    'studio'     => $item['studios'][0]['name'] ?? null,
-                    'synopsis'   => $item['synopsis'] ?? null,
-                    'members'    => $item['members'] ?? 0,
-                    'is_new'     => $status === 'Currently Airing',
-                    'is_airing'  => $status === 'Currently Airing',
-                    'trailer_url' => isset($item['trailer']['embed_url'])
+                    'title'         => $item['title'] ?? '',
+                    'subtitle'      => $item['title_japanese'] ?? $item['title_english'] ?? null,
+                    'english_title' => $item['title_english'] ?? null,
+                    'image'         => $item['images']['jpg']['large_image_url'] ?? $item['images']['jpg']['image_url'] ?? null,
+                    'genre'         => $item['genres'][0]['name'] ?? 'Anime',
+                    'badge'         => $item['genres'][0]['name'] ?? 'Anime',
+                    'rating'        => is_numeric($item['score'] ?? null) ? (float) $item['score'] : 0,
+                    'episodes'      => $item['episodes'] ?? null,
+                    'status'        => $status === 'Currently Airing' ? 'Airing' : 'Done',
+                    'year'          => $item['year'] ?? $item['aired']['prop']['from']['year'] ?? null,
+                    'studio'        => $item['studios'][0]['name'] ?? null,
+                    'synopsis'      => $item['synopsis'] ?? null,
+                    'members'       => $item['members'] ?? 0,
+                    'is_new'        => $status === 'Currently Airing',
+                    'is_airing'     => $status === 'Currently Airing',
+                    'trailer_url'   => isset($item['trailer']['embed_url'])
                         ? str_replace('autoplay=1', 'autoplay=0', $item['trailer']['embed_url']) . '&enablejsapi=0'
                         : null,
-                    'scraped_at' => now(),
+                    'scraped_at'    => now(),
                 ]);
             }
             return $this->normalizeAnime($item);
@@ -316,14 +320,29 @@ class AnimeController extends Controller
         return response()->json($data);
     }
 
+    private function backfillEnglishTitle(Anime $anime, int $id): Anime
+    {
+        $response = Http::timeout(8)->accept('application/json')
+            ->get("https://api.jikan.moe/v4/anime/{$id}");
+        if ($response->successful()) {
+            $englishTitle = $response->json()['data']['title_english'] ?? null;
+            if ($englishTitle) {
+                $anime->english_title = $englishTitle;
+                $anime->save();
+            }
+        }
+        return $anime;
+    }
+
     private function normalizeAnime(?array $item): ?array
     {
         if (!$item) return null;
         $status = $item['status'] ?? '';
         return [
-            'id'         => $item['mal_id'],
-            'title'      => $item['title'] ?? '',
-            'subtitle'   => $item['title_japanese'] ?? $item['title_english'] ?? '',
+            'id'           => $item['mal_id'],
+            'title'        => $item['title'] ?? '',
+            'subtitle'     => $item['title_japanese'] ?? $item['title_english'] ?? '',
+            'englishTitle' => $item['title_english'] ?? null,
             'image'      => $item['images']['jpg']['large_image_url'] ?? $item['images']['jpg']['image_url'] ?? '',
             'genre'      => $item['genres'][0]['name'] ?? $item['demographics'][0]['name'] ?? 'Anime',
             'badge'      => $item['genres'][0]['name'] ?? 'Anime',
