@@ -278,7 +278,7 @@ class AnimeController extends Controller
             $response = Http::timeout(15)->accept('application/json')
                 ->get("https://api.jikan.moe/v4/anime/{$id}/relations");
 
-            $seasonRelations = ['Sequel', 'Prequel', 'Alternative version', 'Parent story', 'Side story', 'Full story', 'Summary'];
+            $seasonRelations = ['Sequel', 'Prequel'];
             $entries = [];
 
             foreach ($response->json()['data'] ?? [] as $rel) {
