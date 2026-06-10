@@ -26,6 +26,10 @@ Route::prefix('anime')->group(function () {
     Route::get('{id}/streaming',      [AnimeController::class, 'streaming']);
     Route::get('{id}/related',        [AnimeController::class, 'related']);
     Route::get('{id}/seasons',        [AnimeController::class, 'seasons']);
+
+    // Engagement — views (public, 30 req/min) and reactions (auth only)
+    Route::post('{id}/view',  [AnimeController::class, 'view'])->middleware('throttle:30,1');
+    Route::post('{id}/react', [AnimeController::class, 'react'])->middleware('auth:sanctum');
 })->where(['id' => '[0-9]+']);
 
 // TV Series (TMDB — all public)
@@ -51,6 +55,10 @@ Route::prefix('films')->group(function () {
     Route::get('search',            [FilmController::class, 'search']);
     Route::get('genre/{genreId}',   [FilmController::class, 'byGenre']);
     Route::get('{id}',              [FilmController::class, 'show']);
+
+    // Engagement — views (public, 30 req/min) and reactions (auth only)
+    Route::post('{id}/view',  [FilmController::class, 'view'])->middleware('throttle:30,1');
+    Route::post('{id}/react', [FilmController::class, 'react'])->middleware('auth:sanctum');
 })->where(['id' => '[0-9]+', 'genreId' => '[0-9]+']);
 
 // Comment routes (GET public, POST/DELETE requires auth)

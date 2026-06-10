@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\HandlesEngagement;
 use App\Models\Film;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -10,6 +11,7 @@ use Illuminate\Support\Facades\Http;
 
 class FilmController extends Controller
 {
+    use HandlesEngagement;
     private const PER_PAGE   = 24;
     private const CACHE_TTL  = 3600; // 1 hour
     private const TMDB_BASE  = 'https://api.themoviedb.org/3';
@@ -187,9 +189,9 @@ class FilmController extends Controller
 
     /**
      * GET /api/films/{id}
-     * Returns film with cast and similar films.
+     * Returns film with cast, similar films, and live engagement counts.
      */
-    public function show(int $id): JsonResponse
+    public function show(Request $request, int $id): JsonResponse
     {
         $film = Cache::remember("films:detail:{$id}", self::CACHE_TTL, function () use ($id) {
             return Film::find($id);
@@ -199,7 +201,24 @@ class FilmController extends Controller
             return response()->json(['message' => 'Film not found'], 404);
         }
 
-        return response()->json(['data' => $film->toApiArray(withSimilar: true)]);
+        $data  = $film->toApiArray(withSimilar: true);
+        $data += $this->engagementData('film', $id);
+
+        return response()->json(['data' => $data]);
+    }
+
+    // ── Engagement endpoints ─────────────────────────────────────────────────
+
+    /** POST /api/films/{id}/view  (public, throttled) */
+    public function view(Request $request, int $id): JsonResponse
+    {
+        return $this->recordView($request, 'film', $id);
+    }
+
+    /** POST /api/films/{id}/react  (auth required) */
+    public function react(Request $request, int $id): JsonResponse
+    {
+        return $this->toggleReaction($request, 'film', $id);
     }
 
     // ── Private helper ───────────────────────────────────────────────────────

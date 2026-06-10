@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\HandlesEngagement;
 use App\Models\Anime;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -10,6 +11,8 @@ use Illuminate\Support\Facades\Http;
 
 class AnimeController extends Controller
 {
+    use HandlesEngagement;
+
     public function hero(): JsonResponse
     {
         $anime = Anime::where('in_hero', true)->first();
@@ -159,53 +162,76 @@ class AnimeController extends Controller
         return response()->json(['data' => $data]);
     }
 
-    public function detail(int $id): JsonResponse
+    public function detail(Request $request, int $id): JsonResponse
     {
+        $data  = null;
         $anime = Anime::find($id);
+
         if ($anime) {
             if (empty($anime->english_title)) {
                 $anime = $this->backfillEnglishTitle($anime, $id);
             }
-            return response()->json(['data' => $anime->toApiArray()]);
+            $data = $anime->toApiArray();
+        } else {
+            // Not in DB yet — fetch live and store it
+            $key  = "anime:detail:{$id}";
+            $data = Cache::remember($key, 21600, function () use ($id) {
+                $response = Http::timeout(15)
+                    ->accept('application/json')
+                    ->get("https://api.jikan.moe/v4/anime/{$id}");
+                if ($response->failed()) return null;
+                $item = $response->json()['data'] ?? null;
+                if ($item) {
+                    $status = $item['status'] ?? '';
+                    Anime::updateOrCreate(['mal_id' => $id], [
+                        'title'         => $item['title'] ?? '',
+                        'subtitle'      => $item['title_japanese'] ?? $item['title_english'] ?? null,
+                        'english_title' => $item['title_english'] ?? null,
+                        'image'         => $item['images']['jpg']['large_image_url'] ?? $item['images']['jpg']['image_url'] ?? null,
+                        'genre'         => $item['genres'][0]['name'] ?? 'Anime',
+                        'badge'         => $item['genres'][0]['name'] ?? 'Anime',
+                        'rating'        => is_numeric($item['score'] ?? null) ? (float) $item['score'] : 0,
+                        'episodes'      => $item['episodes'] ?? null,
+                        'status'        => $status === 'Currently Airing' ? 'Airing' : 'Done',
+                        'year'          => $item['year'] ?? $item['aired']['prop']['from']['year'] ?? null,
+                        'studio'        => $item['studios'][0]['name'] ?? null,
+                        'synopsis'      => $item['synopsis'] ?? null,
+                        'members'       => $item['members'] ?? 0,
+                        'is_new'        => $status === 'Currently Airing',
+                        'is_airing'     => $status === 'Currently Airing',
+                        'trailer_url'   => isset($item['trailer']['embed_url'])
+                            ? str_replace('autoplay=1', 'autoplay=0', $item['trailer']['embed_url']) . '&enablejsapi=0'
+                            : null,
+                        'scraped_at'    => now(),
+                    ]);
+                }
+                return $this->normalizeAnime($item);
+            });
         }
 
-        // Not in DB yet — fetch live and store it
-        $key  = "anime:detail:{$id}";
-        $data = Cache::remember($key, 21600, function () use ($id) {
-            $response = Http::timeout(15)
-                ->accept('application/json')
-                ->get("https://api.jikan.moe/v4/anime/{$id}");
-            if ($response->failed()) return null;
-            $item = $response->json()['data'] ?? null;
-            if ($item) {
-                $status = $item['status'] ?? '';
-                Anime::updateOrCreate(['mal_id' => $id], [
-                    'title'         => $item['title'] ?? '',
-                    'subtitle'      => $item['title_japanese'] ?? $item['title_english'] ?? null,
-                    'english_title' => $item['title_english'] ?? null,
-                    'image'         => $item['images']['jpg']['large_image_url'] ?? $item['images']['jpg']['image_url'] ?? null,
-                    'genre'         => $item['genres'][0]['name'] ?? 'Anime',
-                    'badge'         => $item['genres'][0]['name'] ?? 'Anime',
-                    'rating'        => is_numeric($item['score'] ?? null) ? (float) $item['score'] : 0,
-                    'episodes'      => $item['episodes'] ?? null,
-                    'status'        => $status === 'Currently Airing' ? 'Airing' : 'Done',
-                    'year'          => $item['year'] ?? $item['aired']['prop']['from']['year'] ?? null,
-                    'studio'        => $item['studios'][0]['name'] ?? null,
-                    'synopsis'      => $item['synopsis'] ?? null,
-                    'members'       => $item['members'] ?? 0,
-                    'is_new'        => $status === 'Currently Airing',
-                    'is_airing'     => $status === 'Currently Airing',
-                    'trailer_url'   => isset($item['trailer']['embed_url'])
-                        ? str_replace('autoplay=1', 'autoplay=0', $item['trailer']['embed_url']) . '&enablejsapi=0'
-                        : null,
-                    'scraped_at'    => now(),
-                ]);
-            }
-            return $this->normalizeAnime($item);
-        });
+        // Append live engagement counts (views are unique-IP, likes require auth)
+        if (is_array($data)) {
+            $data += $this->engagementData('anime', $id);
+        }
 
         return response()->json(['data' => $data]);
     }
+
+    // ── Engagement endpoints ─────────────────────────────────────────────────
+
+    /** POST /api/anime/{id}/view  (public, throttled) */
+    public function view(Request $request, int $id): JsonResponse
+    {
+        return $this->recordView($request, 'anime', $id);
+    }
+
+    /** POST /api/anime/{id}/react  (auth required) */
+    public function react(Request $request, int $id): JsonResponse
+    {
+        return $this->toggleReaction($request, 'anime', $id);
+    }
+
+    // ── Episode / streaming helpers ──────────────────────────────────────────
 
     public function episodes(int $id): JsonResponse
     {
@@ -238,7 +264,6 @@ class AnimeController extends Controller
             if (empty($episodes)) {
                 $anime = Anime::find($id);
                 $total = is_numeric($anime?->episodes) ? (int) $anime->episodes : 1;
-                $title = $anime?->title ?? '';
                 for ($n = 1; $n <= max(1, $total); $n++) {
                     $episodes[] = ['number' => $n, 'title' => "Episode {$n}", 'duration' => null, 'thumbnail' => null, 'videoUrl' => null];
                 }
@@ -295,7 +320,6 @@ class AnimeController extends Controller
 
             if (empty($entries)) return ['data' => []];
 
-            // Enrich from local DB first
             $malIds  = array_column($entries, 'mal_id');
             $dbAnime = Anime::whereIn('mal_id', $malIds)->get()->keyBy('mal_id');
 
@@ -305,7 +329,6 @@ class AnimeController extends Controller
                 if ($local) {
                     $seasons[] = array_merge($local->toApiArray(), ['relation' => $entry['relation']]);
                 } else {
-                    // Fetch from Jikan for entries not in DB
                     $res  = Http::timeout(15)->accept('application/json')
                         ->get("https://api.jikan.moe/v4/anime/{$entry['mal_id']}");
                     $item = $res->json()['data'] ?? null;
@@ -319,6 +342,8 @@ class AnimeController extends Controller
         });
         return response()->json($data);
     }
+
+    // ── Private helpers ──────────────────────────────────────────────────────
 
     private function backfillEnglishTitle(Anime $anime, int $id): Anime
     {
