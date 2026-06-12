@@ -82,8 +82,17 @@ Route::middleware('auth:sanctum')->prefix('user')->group(function () {
 
 // Cron trigger (called by cron-job.org every minute)
 Route::get('cron/run', function () {
-    Illuminate\Support\Facades\Artisan::call('schedule:run');
-    return response()->json(['ok' => true]);
+    try {
+        Illuminate\Support\Facades\Artisan::call('schedule:run');
+        $output = Illuminate\Support\Facades\Artisan::output();
+        return response()->json(['ok' => true, 'output' => $output]);
+    } catch (\Throwable $e) {
+        return response()->json([
+            'ok'    => false,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+        ], 500);
+    }
 })->middleware('throttle:1,1');
 
 // Auth routes
