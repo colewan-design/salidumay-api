@@ -11,3 +11,4 @@ Artisan::command('inspire', function () {
 Schedule::command('anime:scrape --pages=4')->hourly();
 Schedule::command('anime:enrich-anilist')->daily();
 Schedule::command('tv:scrape --pages=3 --detail --seasons')->daily();
+Schedule::command('films:scrape --pages=3 --detail')->daily();
