@@ -81,20 +81,29 @@ class AuthController extends Controller
             return redirect(config('app.frontend_url') . '/login?error=google_auth_failed');
         }
 
-        $user = User::updateOrCreate(
-            ['google_id' => $googleUser->getId()],
-            [
-                'name'              => $googleUser->getName(),
-                'email'             => $googleUser->getEmail(),
-                'avatar'            => $googleUser->getAvatar(),
-                'email_verified_at' => now(),
-            ]
-        );
+        try {
+            $user = User::where('google_id', $googleUser->getId())
+                ->orWhere('email', $googleUser->getEmail())
+                ->first();
 
-        // If user registered with email before, link the google account
-        if (! $user->google_id) {
-            $user->google_id = $googleUser->getId();
-            $user->save();
+            if ($user) {
+                $user->update([
+                    'name'              => $googleUser->getName(),
+                    'avatar'            => $googleUser->getAvatar(),
+                    'google_id'         => $googleUser->getId(),
+                    'email_verified_at' => now(),
+                ]);
+            } else {
+                $user = User::create([
+                    'name'              => $googleUser->getName(),
+                    'email'             => $googleUser->getEmail(),
+                    'google_id'         => $googleUser->getId(),
+                    'avatar'            => $googleUser->getAvatar(),
+                    'email_verified_at' => now(),
+                ]);
+            }
+        } catch (\Exception $e) {
+            return redirect(config('app.frontend_url') . '/login?error=google_auth_failed');
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
