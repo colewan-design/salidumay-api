@@ -4,6 +4,7 @@ use App\Http\Controllers\AnimeController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\FilmController;
+use App\Http\Controllers\ManhwaController;
 use App\Http\Controllers\TvSeriesController;
 use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\HistoryController;
@@ -30,6 +31,22 @@ Route::prefix('anime')->group(function () {
     // Engagement — views (public, 30 req/min) and reactions (auth only)
     Route::post('{id}/view',  [AnimeController::class, 'view'])->middleware('throttle:30,1');
     Route::post('{id}/react', [AnimeController::class, 'react'])->middleware('auth:sanctum');
+})->where(['id' => '[0-9]+']);
+
+// Manhwa (Jikan — all public)
+Route::prefix('manhwa')->group(function () {
+    Route::get('trending',        [ManhwaController::class, 'trending']);
+    Route::get('top',             [ManhwaController::class, 'top']);
+    Route::get('new',             [ManhwaController::class, 'newReleases']);
+    Route::get('rankings',        [ManhwaController::class, 'rankings']);
+    Route::get('genres',          [ManhwaController::class, 'genres']);
+    Route::get('search',          [ManhwaController::class, 'search']);
+    Route::get('genre/{genre}',   [ManhwaController::class, 'byGenre']);
+
+    Route::get('{id}',            [ManhwaController::class, 'detail']);
+
+    Route::post('{id}/view',  [ManhwaController::class, 'view'])->middleware('throttle:30,1');
+    Route::post('{id}/react', [ManhwaController::class, 'react'])->middleware('auth:sanctum');
 })->where(['id' => '[0-9]+']);
 
 // TV Series (TMDB — all public)

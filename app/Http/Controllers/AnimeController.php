@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\HandlesEngagement;
 use App\Models\Anime;
+use App\Models\AnimeWatchOrder;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
@@ -303,15 +304,25 @@ class AnimeController extends Controller
         $key = "anime:seasons:{$id}";
         if ($request->boolean('refresh')) Cache::forget($key);
 
-        $data = Cache::remember($key, 21600, function () use ($id) {
+        $data = Cache::remember($key, 86400, function () use ($id) {
+            // Serve from DB if already scraped
+            $rows = AnimeWatchOrder::where('anime_id', $id)
+                ->orderByRaw('FIELD(relation_type, ' . implode(',', array_map(
+                    fn($t) => "'{$t}'",
+                    array_keys(AnimeWatchOrder::TYPE_ORDER)
+                )) . ')')
+                ->get();
+
+            if ($rows->isNotEmpty()) {
+                return ['data' => $rows->map->toApiArray()->values()];
+            }
+
+            // Nothing in DB yet — fall back to Jikan and queue a background scrape
             $response = Http::timeout(15)->accept('application/json')
                 ->get("https://api.jikan.moe/v4/anime/{$id}/relations");
 
-            $seasonRelations = ['Sequel', 'Prequel'];
             $entries = [];
-
             foreach ($response->json()['data'] ?? [] as $rel) {
-                if (!in_array($rel['relation'], $seasonRelations)) continue;
                 foreach ($rel['entry'] ?? [] as $entry) {
                     if (($entry['type'] ?? '') !== 'anime') continue;
                     $entries[] = ['mal_id' => $entry['mal_id'], 'name' => $entry['name'], 'relation' => $rel['relation']];
@@ -340,6 +351,7 @@ class AnimeController extends Controller
 
             return ['data' => $seasons];
         });
+
         return response()->json($data);
     }
 
