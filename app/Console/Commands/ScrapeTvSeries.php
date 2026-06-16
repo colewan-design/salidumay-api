@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 class ScrapeTvSeries extends Command
 {
     protected $signature = 'tv:scrape
+        {--id=             : Scrape a single series by TMDB ID (fetches basic info, detail, and seasons)}
         {--pages=3         : Pages of popular / top-rated / airing-today to scrape (20 per page)}
         {--detail          : Fetch full series detail (cast, crew, trailer) for every series}
         {--detail-only     : Skip list scraping; only backfill detail for series without it}
@@ -40,6 +41,10 @@ class ScrapeTvSeries extends Command
         if (! $this->apiKey) {
             $this->error('TMDB_API_KEY is not set. Add it to your .env file.');
             return 1;
+        }
+
+        if ($singleId = $this->option('id')) {
+            return $this->scrapeSingleSeries((int) $singleId);
         }
 
         $detailOnly  = $this->option('detail-only');
@@ -75,6 +80,93 @@ class ScrapeTvSeries extends Command
             "Series with seasons: {$this->seasoned}  |  Errors: {$this->errors}"
         );
 
+        return 0;
+    }
+
+    // ── Single-series mode ───────────────────────────────────────────────────
+
+    private function scrapeSingleSeries(int $tmdbId): int
+    {
+        $this->info("Scraping single series TMDB #{$tmdbId}…");
+
+        // Basic info
+        $basic = $this->tmdb("/tv/{$tmdbId}");
+        if (! $basic) {
+            $this->error("Could not fetch series #{$tmdbId} from TMDB.");
+            return 1;
+        }
+
+        $this->upsertBasic($basic, []);
+
+        // Full detail
+        $data = $this->tmdb("/tv/{$tmdbId}", ['append_to_response' => 'credits,videos']);
+        $series = TvSeries::find($tmdbId);
+
+        if ($data && $series) {
+            $series->update([
+                'tagline'            => $data['tagline'] ?? $series->tagline,
+                'status'             => $data['status'] ?? $series->status,
+                'overview'           => $data['overview'] ?? $series->overview,
+                'number_of_seasons'  => $data['number_of_seasons'] ?? $series->number_of_seasons,
+                'number_of_episodes' => $data['number_of_episodes'] ?? $series->number_of_episodes,
+                'genres'             => $this->buildGenres($data['genres'] ?? []),
+                'cast'               => $this->buildCast($data['credits']['cast'] ?? []),
+                'created_by'         => $this->buildCreatedBy($data['created_by'] ?? []),
+                'trailer_key'        => $this->extractTrailerKey($data['videos']['results'] ?? []),
+                'detail_fetched'     => true,
+            ]);
+            $this->info("  ✓ Detail saved.");
+            $series->refresh();
+        }
+
+        // Seasons + episodes
+        if ($series && $series->number_of_seasons) {
+            for ($s = 1; $s <= $series->number_of_seasons; $s++) {
+                $seasonData = $this->tmdb("/tv/{$tmdbId}/season/{$s}");
+                if (! $seasonData) { usleep(self::REQUEST_GAP * 1000); continue; }
+
+                $season = TvSeason::updateOrCreate(
+                    ['series_id' => $tmdbId, 'season_number' => $s],
+                    [
+                        'name'          => $seasonData['name'] ?? "Season {$s}",
+                        'overview'      => $seasonData['overview'] ?? null,
+                        'poster_url'    => $this->img($seasonData['poster_path'] ?? null, 'w342'),
+                        'air_date'      => $seasonData['air_date'] ?? null,
+                        'episode_count' => count($seasonData['episodes'] ?? []),
+                        'scraped_at'    => now(),
+                    ]
+                );
+
+                foreach ($seasonData['episodes'] ?? [] as $ep) {
+                    if (! ($ep['id'] ?? null)) continue;
+                    TvEpisode::upsert(
+                        [[
+                            'id'             => $ep['id'],
+                            'series_id'      => $tmdbId,
+                            'season_id'      => $season->id,
+                            'season_number'  => $s,
+                            'episode_number' => $ep['episode_number'] ?? 0,
+                            'name'           => $ep['name'] ?? null,
+                            'overview'       => $ep['overview'] ?? null,
+                            'still_url'      => $this->img($ep['still_path'] ?? null, 'w300'),
+                            'air_date'       => $ep['air_date'] ?? null,
+                            'runtime'        => $ep['runtime'] ?? null,
+                            'rating'         => $ep['vote_average'] ?? 0,
+                            'scraped_at'     => now(),
+                        ]],
+                        ['id'],
+                        ['name', 'overview', 'still_url', 'air_date', 'runtime', 'rating', 'scraped_at']
+                    );
+                }
+
+                $this->line("  S{$s}: " . count($seasonData['episodes'] ?? []) . " episode(s) saved.");
+                usleep(self::REQUEST_GAP * 1000);
+            }
+
+            $series->update(['seasons_fetched' => true]);
+        }
+
+        $this->info("Done.");
         return 0;
     }
 
@@ -163,17 +255,19 @@ class ScrapeTvSeries extends Command
         foreach ($pending as $series) {
             $this->line("  #{$series->id} {$series->title} ({$series->number_of_seasons} season(s))");
 
-            $success = true;
+            $fetched  = 0;
+            $notFound = 0;
 
             for ($s = 1; $s <= $series->number_of_seasons; $s++) {
                 $data = $this->tmdb("/tv/{$series->id}/season/{$s}");
 
                 if (! $data) {
-                    $success = false;
-                    $this->errors++;
+                    $notFound++;
                     usleep(self::REQUEST_GAP * 1000);
                     continue;
                 }
+
+                $fetched++;
 
                 $season = TvSeason::updateOrCreate(
                     ['series_id' => $series->id, 'season_number' => $s],
@@ -216,9 +310,17 @@ class ScrapeTvSeries extends Command
                 usleep(self::REQUEST_GAP * 1000);
             }
 
-            if ($success) {
+            $this->errors += $notFound;
+
+            // Mark done if at least one season was fetched, or if TMDB has no data at all
+            // (all 404s). This prevents endlessly retrying shows TMDB can't serve.
+            if ($fetched > 0 || $notFound === $series->number_of_seasons) {
                 $series->update(['seasons_fetched' => true]);
                 $this->seasoned++;
+
+                if ($notFound > 0 && $fetched === 0) {
+                    $this->warn("    ⚠ No season data on TMDB — marked done to skip future runs");
+                }
             }
         }
     }
