@@ -6,6 +6,7 @@ use App\Models\TvEpisode;
 use App\Models\TvSeason;
 use App\Models\TvSeries;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -166,6 +167,7 @@ class ScrapeTvSeries extends Command
             $series->update(['seasons_fetched' => true]);
         }
 
+        Cache::forget("tv:detail:{$tmdbId}");
         $this->info("Done.");
         return 0;
     }
